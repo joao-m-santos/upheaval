@@ -6,16 +6,18 @@ public class NewMovement : MonoBehaviour {
 
     private Rigidbody2D rb; // The character's Rigidbody
     private bool facingRight = true;  // For determining which way the player is currently facing.
+    public bool shouldRotateOnClimb;
     public Vector2 direction;
+    public Vector2 currentSpeed;
 
     [Header("Movement")]
     public float moveSpeed = 10f;
-    //public float maxSpeed = 7f;
-    public float currentSpeed = 0f;
+    public float maxSpeed = 20f;
 
     [Header("Jumping")]
     public bool isGrounded; // Whether or not the player is on ground.
     public bool isJumping;
+    public bool isWallJumping;
 
     public float jumpForce = 28f;
     public float fallMultiplier = 2f;
@@ -29,12 +31,8 @@ public class NewMovement : MonoBehaviour {
     [SerializeField] private bool airControl = true; // Whether or not a player can steer while jumping;
 
     [Header("Climbing")]
-    public bool isWalled;
-    public bool isTouchingWall;
     public bool isClimbing;
-    public float climbingSpeed = 0f;
-
-    public bool isWallJumping;
+    public float climbingSpeed = 10f;
 
     [Header("Physics")]
     public int gravity = 8;
@@ -55,38 +53,34 @@ public class NewMovement : MonoBehaviour {
 
     // Update is called once per frame
     void Update() {
+        currentSpeed = rb.velocity;
         direction = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
-        bool isPressingJump = Input.GetButtonDown("Jump");
 
         isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, whatIsGround);
-        isWalled = Physics2D.OverlapCircle(wallCheck.position, wallCheckRadius, whatIsWall);
+        isClimbing = Physics2D.OverlapCircle(wallCheck.position, wallCheckRadius, whatIsWall);
 
-        if (isGrounded) extraJumps = extraJumpValue;
+        if (isGrounded) {
+            extraJumps = extraJumpValue;
+        }
 
         if (Input.GetButtonDown("Jump")) {
-            isJumping = true;
             jumpTimeCounter = jumpTime;
 
             if (extraJumps > 0) {
-                rb.velocity = Vector2.up * jumpForce;
+                isJumping = true;
                 extraJumps--;
             } else if (isGrounded) {
-                rb.velocity = Vector2.up * jumpForce;
+                isJumping = true;
             }
-        }
 
-        if (Input.GetButton("Jump") && isJumping) {
-
-            if (jumpTimeCounter > 0) {
-                rb.velocity = Vector2.up * jumpForce;
-                jumpTimeCounter -= Time.deltaTime;
-            } else {
-                isJumping = false;
+            if (isClimbing) {
+                isWallJumping = true;
             }
         }
 
         if (Input.GetButtonUp("Jump")) {
             isJumping = false;
+            isWallJumping = false;
         }
     }
 
@@ -99,11 +93,34 @@ public class NewMovement : MonoBehaviour {
             // Faster fall
             if (rb.velocity.y < 0) {
                 rb.gravityScale = gravity * fallMultiplier;
+
+                if (Mathf.Abs(rb.velocity.y) >= maxSpeed) {
+                    rb.velocity = new Vector2(rb.velocity.x, -maxSpeed);
+                }
             }
         }
 
-        if (isGrounded || airControl) {
+        if (isClimbing) {
+            Climb();
+        } else if (isGrounded || airControl) {
             Move();
+        }
+
+        if (isJumping) {
+            Jump();
+        }
+
+        if (isWallJumping) {
+            WallJump();
+        }
+
+        if (Input.GetButton("Jump") && isJumping) {
+            if (jumpTimeCounter > 0) {
+                rb.velocity = new Vector2(rb.velocity.x, jumpForce);
+                jumpTimeCounter -= Time.fixedDeltaTime;
+            } else {
+                isJumping = false;
+            }
         }
     }
 
@@ -114,6 +131,33 @@ public class NewMovement : MonoBehaviour {
 
         if (direction.x > 0 && !facingRight || direction.x < 0 && facingRight) {
             Flip();
+        }
+    }
+
+    public void Climb() {
+        float computedSpeed = climbingSpeed;
+
+        float xForce;
+        if (facingRight && direction.x > 0 || !facingRight && direction.x < 0)
+            xForce = 0f;
+        else xForce = direction.x * moveSpeed;
+
+        rb.velocity = new Vector2(xForce, direction.y * climbingSpeed);
+
+        //if (direction.x > 0 && !facingRight || direction.x < 0 && facingRight) {
+        //    Flip();
+        //}
+    }
+
+    public void Jump() {
+        rb.velocity = new Vector2(rb.velocity.x, jumpForce);
+    }
+
+    public void WallJump() {
+        if (isClimbing && direction.x != 0) {
+            if (facingRight && direction.x < 0 || !facingRight && direction.x > 0) {
+                rb.velocity = new Vector2(direction.x * moveSpeed, jumpForce);
+            }
         }
     }
 
